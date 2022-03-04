@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -48,28 +50,27 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
   List<SendGAData> galist = [];
-  ScrollController? _scrollController;
   int index = 0;
-  ScrollNotification? _scrollNotification;
+
+  static const timerDuration = const Duration(seconds: 3);
+  Timer? _timer;
+  Map<int, int> visibleIndexes = {};
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
-    _scrollController = ScrollController();
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+
+    _timer = Timer(timerDuration, () {
+      sendVisibleIndex();
+    });
   }
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  sendVisibleIndex() {
+    // Send the visible indexes to the GA
+    print(visibleIndexes.values.toList());
+    visibleIndexes.clear();
   }
 
   @override
@@ -87,62 +88,59 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(widget.title),
       ),
       body: Center(
-          // Center is a layout widget. It takes a single child and positions it
-          // in the middle of the parent.
-          child: NotificationListener<ScrollNotification>(
-        child: ListView.builder(
-          controller: _scrollController,
-          itemBuilder: (ctx, pos) {
-            return VisibilityDetector(
-
-              key: Key(pos.toString()),
-              onVisibilityChanged: (VisibilityInfo info) =>
-                  onVisibityChanged(info, pos),
-              child: Column(
-                children: [
-                  Container(
-                    child: Padding(
-                      padding: const EdgeInsets.all(70.0),
-                      child: Center(
-                          child: Text(
-                        "ITEM $pos",
-                        style: TextStyle(fontSize: 30),
-                      )),
+        // Center is a layout widget. It takes a single child and positions it
+        // in the middle of the parent.
+        child: NotificationListener<ScrollNotification>(
+          child: ListView.builder(
+            itemBuilder: (ctx, pos) {
+              return VisibilityDetector(
+                key: Key(pos.toString()),
+                onVisibilityChanged: (VisibilityInfo info) =>
+                    onVisibityChanged(info, pos),
+                child: Column(
+                  children: [
+                    Container(
+                      child: Padding(
+                        padding: const EdgeInsets.all(70.0),
+                        child: Center(
+                            child: Text(
+                          "ITEM $pos",
+                          style: TextStyle(fontSize: 30),
+                        )),
+                      ),
                     ),
-                  ),
-                  Divider()
-                ],
-              ),
-            );
+                    Divider()
+                  ],
+                ),
+              );
+            },
+            itemCount: 100,
+          ),
+          onNotification: (scrollNotification) {
+            if (scrollNotification is ScrollStartNotification) {
+              _timer?.cancel();
+              _timer = null;
+            } else if (scrollNotification is ScrollEndNotification) {
+              _timer = Timer(timerDuration, () {
+                sendVisibleIndex();
+              });
+            }
+            return true;
           },
-          itemCount: 100,
         ),
-        onNotification: (scrollNotification) {
-          if (scrollNotification is ScrollEndNotification) {
-            _scrollNotification = scrollNotification;
-            setState(() {});
-          }
-          return true;
-        },
-      )),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
     );
   }
 
   void onVisibityChanged(VisibilityInfo info, int index) {
-    // if(!_scrollController!.position.activity!.isScrolling)
-    if (_scrollNotification is ScrollEndNotification) {
-      Future.delayed(Duration(seconds: 1), () {
-        if (!_scrollController!
-            .position.activity!.isScrolling) if (info.visibleFraction == 1) {
-          print(index);
-        }
-      });
-    } else {}
+    var visiblePercentage = info.visibleFraction * 100;
+    if (visiblePercentage == 100) {
+      // print(index);
+      visibleIndexes[index] = index;
+      // print(visibleIndexes.values.toList());
+    } else {
+      visibleIndexes.remove(index);
+    }
   }
 }
 
